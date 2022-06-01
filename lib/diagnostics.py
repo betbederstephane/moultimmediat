@@ -1,87 +1,49 @@
 #!/usr/bin/env python
 
-import netifaces
 import os
 import sh
-import socket
 import sqlite3
+import re
 import utils
+import cec
+from lib import raspberry_pi_helper
+from utils import connect_to_redis
 from pprint import pprint
-from uptime import uptime
 from datetime import datetime
-
-
-def parse_cpu_info():
-    cpu_info = {
-        'cpu_count': 0
-    }
-
-    with open('/proc/cpuinfo', 'r') as f:
-        for line in f:
-            try:
-                key = line.split(':')[0].strip()
-                value = line.split(':')[1].strip()
-            except:
-                pass
-
-            if key == 'processor':
-                cpu_info['cpu_count'] += 1
-
-            if key in ['Serial', 'Hardware', 'Revision', 'model name']:
-                cpu_info[key.lower()] = value
-    return cpu_info
-
-
-def get_kernel_modules():
-    modules = []
-    try:
-        for line in sh.lsmod():
-            if 'Module' not in line:
-                modules.append(line.split()[0])
-        return modules
-    except:
-        return 'Unable to run lsmod.'
-
-
-def get_gpu_version():
-    try:
-        version = sh.vcgencmd('version')
-        for line in version:
-            if 'version' in line:
-                return line.strip().replace('version ', '')
-    except:
-        return 'Unable to run vcgencmd.'
 
 
 def get_monitor_status():
     try:
         return sh.tvservice('-s').stdout.strip()
-    except:
+    except Exception:
         return 'Unable to run tvservice.'
 
 
 def get_display_power():
+    """
+    Queries the TV using CEC
+    """
+    tv_status = None
+
     try:
-        display_status = sh.vcgencmd('display_power').stdout.strip().split('=')
-        if display_status[1] == '1':
-            return 'On'
-        elif display_status[1] == '0':
-            return 'Off'
-        else:
-            return 'Unknown'
+        cec.init()
+        tv = cec.Device(cec.CECDEVICE_TV)
     except:
-        return 'Unable to determine display power.'
+        return 'CEC error'
 
+    try:
+        tv_status = tv.is_on()
+    except IOError:
+        return 'Unknown'
 
-def get_network_interfaces():
-    if_data = {}
-    for interface in netifaces.interfaces():
-        if_data[interface] = netifaces.ifaddresses(interface)
-    return if_data
+    return tv_status
 
 
 def get_uptime():
-    return uptime()
+    with open('/proc/uptime', 'r') as f:
+        uptime_seconds = float(f.readline().split()[0])
+
+    return uptime_seconds
 
 
 def get_playlist():
@@ -111,18 +73,16 @@ def get_load_avg():
     return load_avg
 
 
-def get_git_hash():
-    screenly_path = os.path.join(os.getenv('HOME'), 'screenly', '.git')
-    try:
-        get_hash = sh.git(
-            '--git-dir={}'.format(screenly_path),
-            'rev-parse',
-            'HEAD'
-        )
-        return get_hash.stdout.strip()
-    except:
-        return 'Unable to get git hash.'
+def get_git_branch():
+    return os.getenv('GIT_BRANCH')
 
+
+def get_git_short_hash():
+    return os.getenv('GIT_SHORT_HASH')
+
+
+def get_git_hash():
+    return os.getenv('GIT_HASH')
 
 def try_connectivity():
     urls = [
@@ -140,11 +100,6 @@ def try_connectivity():
     return result
 
 
-def ntp_status():
-    query_ntp = sh.ntpq('-p')
-    return query_ntp.stdout
-
-
 def get_utc_isodate():
     return datetime.isoformat(datetime.utcnow())
 
@@ -159,23 +114,56 @@ def get_debian_version():
         return 'Unable to get Debian version.'
 
 
+def get_raspberry_code():
+    """
+    Temporary workaround and just all on another function
+    """
+    return raspberry_pi_helper.parse_cpu_info().get('revision', False)
+
+
+def get_raspberry_model(raspberry_pi_revision):
+    """
+    Quick DRY workaround. Needs to be refactored later.
+    """
+    return raspberry_pi_helper.lookup_raspberry_pi_revision(raspberry_pi_revision)['model']
+
+
+def get_raspberry_revision(raspberry_pi_revision):
+    """
+    Quick DRY workaround. Needs to be refactored later.
+    """
+    return raspberry_pi_helper.lookup_raspberry_pi_revision(raspberry_pi_revision)['revision']
+
+
+def get_raspberry_ram(raspberry_pi_revision):
+    """
+    Quick DRY workaround. Needs to be refactored later.
+    """
+    return raspberry_pi_helper.lookup_raspberry_pi_revision(raspberry_pi_revision)['ram']
+
+
+def get_raspberry_manufacturer(raspberry_pi_revision):
+    """
+    Quick DRY workaround. Needs to be refactored later.
+    """
+    return raspberry_pi_helper.lookup_raspberry_pi_revision(raspberry_pi_revision)['manufacturer']
+
+
 def compile_report():
+    """
+    Compile report with various data points.
+    """
     report = {}
-    report['cpu_info'] = parse_cpu_info()
+    report['cpu_info'] = raspberry_pi_helper.parse_cpu_info()
     report['uptime'] = get_uptime()
-    report['kernel_modules'] = get_kernel_modules()
     report['monitor'] = get_monitor_status()
     report['display_power'] = get_display_power()
-    report['ifconfig'] = get_network_interfaces()
-    report['hostname'] = socket.gethostname()
     report['playlist'] = get_playlist()
     report['git_hash'] = get_git_hash()
     report['connectivity'] = try_connectivity()
     report['loadavg'] = get_load_avg()
-    report['ntp_status'] = ntp_status()
     report['utc_isodate'] = get_utc_isodate()
     report['debian_version'] = get_debian_version()
-    report['gpu_version'] = get_gpu_version()
 
     return report
 
