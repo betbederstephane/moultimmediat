@@ -23,10 +23,10 @@ echo 'Here are your Balena apps:'
 balena apps
 echo
 
-# read -p "Enter the app name of the app you want to deploy to (needs to be SLUG): " -r APP_NAME
+read -p "Enter the app name of the app you want to deploy to (needs to be SLUG): " -r APP_NAME
 
 # Get the device type from the device type in Balena
-DEVICE_TYPE=$(balena app "iseg" | grep "DEVICE TYPE:" | sed 's/DEVICE TYPE: raspberry\(pi[0-9]\).*/\1/')
+DEVICE_TYPE=$(balena app "$APP_NAME" | grep "DEVICE TYPE:" | sed 's/DEVICE TYPE: raspberry\(pi[0-9]\).*/\1/')
 
 mkdir -p .balena
 cat <<EOF > .balena/balena.yml
@@ -41,14 +41,12 @@ build-variables:
 EOF
 
 echo "Setting variables..."
-balena env add BALENA_HOST_CONFIG_gpu_mem 128 --application "iseg"
-balena env add BALENA_HOST_CONFIG_framebuffer_depth 32 --application "iseg"
-balena env add BALENA_HOST_CONFIG_framebuffer_ignore_alpha 1 --application "iseg"
+balena env add BALENA_HOST_CONFIG_gpu_mem 128 --application "$APP_NAME"
+balena env add BALENA_HOST_CONFIG_framebuffer_depth 32 --application "$APP_NAME"
+balena env add BALENA_HOST_CONFIG_framebuffer_ignore_alpha 1 --application "$APP_NAME"
 
 if [ "$DEVICE_TYPE" = "pi4" ]; then
-    balena env add BALENA_HOST_CONFIG_dtparam "\"i2c_arm=on\",\"spi=on\",\"audio=on\",\"vc4-kms-v3d\"" --application "iseg"
+    balena env add BALENA_HOST_CONFIG_dtparam "\"i2c_arm=on\",\"spi=on\",\"audio=on\",\"vc4-kms-v3d\"" --application "$APP_NAME"
 fi
 
-balena deploy --build "iseg"
-
-pause
+balena deploy --build "$APP_NAME"
