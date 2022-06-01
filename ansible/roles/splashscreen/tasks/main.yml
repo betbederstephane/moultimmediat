@@ -3,9 +3,7 @@
 # If Jessie
 - name: Installs dependencies (Jessie)
   apt:
-    name: "{{ item }}"
-  with_items:
-    - fbi
+    name: fbi
   when: ansible_distribution_major_version|int <= 7
 
 - name: Copies in splash screen
@@ -28,7 +26,6 @@
   when: ansible_distribution_major_version|int <= 7
 
 # If not Jessie
-
 - name: Remove older versions
   file:
     state: absent
@@ -44,9 +41,7 @@
 
 - name: Installs dependencies (not Jessie)
   apt:
-    name: "{{ item }}"
-  with_items:
-    - plymouth
+    name: plymouth
   when: ansible_distribution_major_version|int > 7
 
 - name: Copies plymouth theme
@@ -62,3 +57,16 @@
 - name: Set splashscreen
   command: plymouth-set-default-theme -R screenly
   when: ansible_distribution_major_version|int > 7
+
+- name: Set plymouthd.default
+  copy:
+    src: plymouthd.default
+    dest: /usr/share/plymouth/plymouthd.defaults
+  when: ansible_distribution_major_version|int > 7
+  
+- name: Copy to plymouthd.conf
+  copy:
+    src: plymouthd.default
+    dest: /etc/plymouth/plymouthd.conf
+  when: ansible_distribution_major_version|int > 7
+  
